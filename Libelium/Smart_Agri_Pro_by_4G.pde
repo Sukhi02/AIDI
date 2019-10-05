@@ -1,0 +1,356 @@
+/*
+Socket B : Soil Moisture 1.5 m Sensor
+Socket C : Soil Moisture 8 m Sensor
+Socket D : Temperature, Humidity, Pressure (BME) Sensor
+Socket E : Soil Moisture 4.5 m Sensor
+Socket F : Luminosity (Luxes) Sensor
+
+   Developed by Akash Kasturkar (Appication Engineer - Intrinsic Solutions)
+*/
+
+#include <Wasp4G.h>
+#include <WaspSensorAgr_v30.h>
+#include <WaspFrame.h>
+
+
+// APN settings
+///////////////////////////////////////
+char apn[] = "";
+char login[] = "";
+char password[] = "";
+
+// SERVER settings
+///////////////////////////////////////
+
+char ftp_server[] = "ftp.smartfasal.in";
+uint16_t ftp_port = 21;
+char ftp_user[] = "testuser@smartfasal.in";
+char ftp_pass[] = "fasal@thapar";
+///////////////////////////////////////
+/*
+char ftp_server[] = "test.libelium.com";
+uint16_t ftp_port = 21;
+char ftp_user[] = "usertech01";
+char ftp_pass[] = "Bm3y6ywMhQvM";
+*/
+
+/////////////////////////////////////////////////////////////////////// 
+// Define filenames for SD card and FTP server:
+//  - If the file is in the root directory: "FILE.TXT" or "/FILE.TXT" 
+//  - If the file is inside a folder: "/FOLDER/FILE.TXT"  
+///////////////////////////////////////////////////////////////////////
+char SD_FILE[]     = "/FILE1.TXT";
+char SERVER_FILE[] = "/S_Agri.txt";
+
+
+
+float watermark1, watermark2, watermark3;
+float temp,humd,pres;
+uint32_t luxes = 0;
+
+
+watermarkClass wmSensor1(SOCKET_1);
+watermarkClass wmSensor2(SOCKET_2);
+watermarkClass wmSensor3(SOCKET_3);
+
+
+// define the Waspmote ID 
+char moteID[] = "Smart_Agriculture";
+
+
+// define variables
+char data[400];
+char wm1[10];
+char wm2[10];
+char wm3[10];
+char temperature[10];
+char humidity[10];
+char pressure[10];
+char lux[10];
+uint8_t sd_answer;
+uint8_t error;
+uint32_t previous;
+
+
+void setup()
+{
+      USB.ON();
+    USB.println ("********************************************************");
+    USB.println(F("Welcome to Smart Agriculture Project by TIET"));
+    USB.println ("********************************************************");
+
+   // Turn on the RTC
+   RTC.ON();
+
+   ACC.ON();
+
+  // set the Waspmote ID
+  frame.setID(moteID);  
+
+ //////////////////////////////////////////////////
+  //sets operator parameters
+  //////////////////////////////////////////////////
+  _4G.set_APN(apn, login, password);
+
+
+  //////////////////////////////////////////////////
+  //Show APN settings via USB port
+  //////////////////////////////////////////////////
+  _4G.show_APN();
+
+
+//////////////////////////////////////////////////
+  // 1. Create a new file to upload
+  //////////////////////////////////////////////////
+
+  ///////////////////////////////////
+  // 1.1. Init SD card
+  ///////////////////////////////////
+  sd_answer = SD.ON();
+
+  if (sd_answer == 1)
+  {
+    USB.println(F("1. SD init OK"));
+  }
+  else
+  {
+    USB.println(F("1. SD init ERROR"));
+  }
+
+  ///////////////////////////////////
+  // 1.2. Delete file if exists
+  ///////////////////////////////////
+  sd_answer = SD.del(SD_FILE);
+
+  if (sd_answer == 1)
+  {
+    USB.println(F("2. File deleted"));
+  }
+  else
+  {
+    USB.println(F("2. File NOT deleted"));
+  }
+
+  ///////////////////////////////////
+  // 1.3. Create file
+  ///////////////////////////////////
+  sd_answer = SD.create(SD_FILE);
+
+  if (sd_answer == 1)
+  {
+    USB.println(F("3. File created"));
+  }
+  else
+  {
+    USB.println(F("3. File NOT created"));
+  }
+  
+ USB.println(F("*************************************************************"));
+  
+}
+
+
+void loop()
+{
+    // Turn on the sensor board
+  Agriculture.ON(); 
+
+
+  // Part 1: Read the sensors one by one 
+  USB.println(F("Wait for Watermark 1..."));
+  watermark1 = wmSensor1.readWatermark();      
+  
+  USB.println(F("Wait for Watermark 2..."));  
+  watermark2 = wmSensor2.readWatermark();      
+  
+  USB.println(F("Wait for Watermark 3..."));  
+  watermark3 = wmSensor3.readWatermark();    
+
+
+  temp = Agriculture.getTemperature();
+  humd  = Agriculture.getHumidity();
+  pres = Agriculture.getPressure();
+
+
+  luxes = Agriculture.getLuxes(OUTDOOR);
+
+
+    Agriculture.OFF(); 
+
+
+  // Part 2: USB printing
+  // Print the readings from sensors
+  USB.print(F("Watermark 1 - Frequency: "));
+  USB.print(watermark1);
+  USB.println(F(" Hz"));
+            Utils.float2String(watermark1, wm1, 2);
+            
+  USB.print(F("Watermark 2 - Frequency: "));
+  USB.print(watermark2);
+  USB.println(F(" Hz")); 
+           Utils.float2String(watermark2, wm2, 2);
+            
+  USB.print(F("Watermark 3 - Frequency: "));
+  USB.print(watermark3);
+  USB.println(F(" Hz"));  
+          Utils.float2String(watermark3, wm3, 2);
+
+
+  USB.print(F("Temperature: "));
+  USB.print(temp);
+  USB.println(F(" Celsius"));
+          Utils.float2String(temp, temperature, 2);
+          
+  USB.print(F("Humidity: "));
+  USB.print(humd);
+  USB.println(F(" %"));  
+          Utils.float2String(humd, humidity, 2);
+          
+  USB.print(F("Pressure: "));
+  USB.print(pres);
+  USB.println(F(" Pa")); 
+          Utils.float2String(pres, pressure, 2);
+
+
+  USB.print(F("Luxes: "));
+  USB.print(luxes);
+  USB.println(F(" lux"));
+         Utils.float2String(luxes, lux, 2);
+
+
+  // Create new frame (ASCII)
+  frame.createFrame(ASCII); 
+
+   frame.addSensor(SENSOR_AGR_SOIL_B, watermark1);
+   frame.addSensor(SENSOR_AGR_SOIL_C, watermark3);
+   frame.addSensor(SENSOR_AGR_SOIL_E, watermark2);
+   frame.addSensor(SENSOR_AGR_TC, temp);
+   frame.addSensor(SENSOR_AGR_HUM, humd);
+   frame.addSensor(SENSOR_AGR_PRES, pres);
+   frame.addSensor(SENSOR_AGR_LUXES, lux);
+   
+   frame.addSensor(SENSOR_BAT, PWR.getBatteryLevel());
+
+     // Prints frame
+  frame.showFrame();
+
+
+  ///////////////////////////////////
+   // 5. Append contents
+   ///////////////////////////////////
+  SD.ON();
+ ///////////////////////////////////
+
+    sprintf(data, "NodeID=Smart_Agriculture\tWatermark1=%s\tWatermark2=%s\tWatermark3=%s\tTemperature=%s\tHumidity=%s\tPressure=%s\tLuxes=%s\tBattery=%d\tTimestamp=%s\n", wm1, wm2, wm3, temperature, humidity, pressure, 
+                          lux,  PWR.getBatteryLevel(), RTC.getTime());
+    sd_answer = SD.append(SD_FILE, data);
+ 
+    SD.showFile(SD_FILE);
+    USB.println(F("4. Appending data..."));
+
+    if (sd_answer != 1)
+    {
+      USB.println(F("SD append error"));
+    }
+    else
+    {
+      USB.println(F("SD append ok"));
+    }
+    
+  ///////////////////////////////////
+  // 6. Close SD
+  ///////////////////////////////////
+  SD.OFF();
+  USB.println(F("5. SD off"));
+  USB.println(F("Setup done\n\n"));
+
+
+
+  //////////////////////////////////////////////////
+  // 6. Switch ON 4G
+  //////////////////////////////////////////////////
+  error = _4G.ON();
+
+  if (error == 0)
+  {
+    USB.println(F("6. 4G module ready..."));
+
+    ////////////////////////////////////////////////
+    // 6.1. FTP open session
+    ////////////////////////////////////////////////
+
+    error = _4G.ftpOpenSession(ftp_server, ftp_port, ftp_user, ftp_pass);
+
+    // check answer
+    if (error == 0)
+    {
+      USB.println(F("6.1. FTP open session OK"));
+      
+
+      previous = millis();
+
+      //////////////////////////////////////////////
+      // 6.2. FTP upload
+      //////////////////////////////////////////////
+
+      error = _4G.ftpUpload(SERVER_FILE, SD_FILE);
+
+      if (error == 0)
+      {
+
+        USB.print(F("6.2. Uploading SD file to FTP server done! "));
+        USB.print(F("Upload time: "));
+        USB.print((millis() - previous) / 1000, DEC);
+        USB.println(F(" s"));
+        
+      }
+      else
+      {
+        USB.print(F("6.2. Error calling 'ftpUpload' function. Error: "));
+        USB.println(error, DEC);
+      }
+
+
+      //////////////////////////////////////////////
+      // 6.3. FTP close session
+      //////////////////////////////////////////////
+
+      error = _4G.ftpCloseSession();
+
+      if (error == 0)
+      {
+        USB.println(F("6.3. FTP close session OK"));
+        
+      }
+      else
+      {
+        USB.print(F("6.3. Error calling 'ftpCloseSession' function. error: "));
+        USB.println(error, DEC);
+        USB.print(F("CMEE error: "));
+        USB.println(_4G._errorCode, DEC);
+      }
+    }
+    else
+    {
+      USB.print(F( "6.1. FTP connection error: "));
+      USB.println(error, DEC);
+    }
+  }
+  else
+  {
+    // Problem with the communication with the 4G module
+    USB.println(F("6. 4G module not started"));
+  }
+
+
+
+
+    ////////////////////////////////////////////////
+  // 8. Go to Deepsleep
+  ////////////////////////////////////////////////
+  USB.println(F("7. I am going to sleep now..."));
+  PWR.deepSleep("00:00:01:00", RTC_OFFSET, RTC_ALM1_MODE1, ALL_OFF);
+  USB.ON();
+  USB.println(F("8. Wake up!!\n\n"));
+
+}
